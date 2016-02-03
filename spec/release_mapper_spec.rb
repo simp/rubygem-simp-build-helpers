@@ -7,8 +7,10 @@ describe Simp::Build::ReleaseMapper do
     Simp::Build::ReleaseMapper.new( '5.1.X', mappings_path )
   end
 
-  it "#initialize" do
-    mapper
+  describe "#initialize" do
+    it 'runs without errors' do
+      mapper
+    end
   end
 end
 
