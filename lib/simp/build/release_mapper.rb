@@ -1,35 +1,21 @@
 require 'yaml'
+require 'pry'
 
 
 module Simp::Build
   class SIMPBuildException < Exception; end
   class ReleaseMapper
-    def initialize( target_release, mappings_file )
-      @target_release = target_release
-      @mappings_file = mappings_file
+    attr_accessor :do_checksums, :verbose
+
+    def initialize( target_release, mappings_file, do_checksums = false )
+      @target_release   = target_release
+      @mappings_file    = mappings_file
       @release_mappings = YAML.load_file( mappings_file )
-      @target_data = get_release_mappings_for_target( @target_release, @release_mappings )
+      @target_data      = get_release_mappings_for_target( @target_release, @release_mappings )
+      @do_checksums     = do_checksums
+      @verbose          = false
     end
 
-
-    def validate_iso_paths( iso_paths )
-      source_flavor = nil
-
-      binding.pry
-      # Validate ISOs
-      iso_paths.split(':').each do |iso_path|
-        if File.file? iso_path
-          source_flavor = get_rel_flavor_for_iso iso_path
-
-          binding.pry
-        elsif File.directory? iso_path
-          binding.pry
-        else
-           raise SIMPBuildException, "No file or directory at Source ISO path '#{iso_path}'"
-        end
-      end
-      binding.pry
-    end
 
     def get_release_mappings_for_target( target_release, release_mappings )
       unless target_data = release_mappings
@@ -48,67 +34,105 @@ module Simp::Build
     end
 
 
-    def get_rel_flavor_for_iso_by_name( iso_path, target_data )
-      name = File.basename iso_path
-      source_flavors = target_data['flavors']
-                                 .select do |flavor,flavor_data|
-                                   !flavor_data['isos']
-                                     .select{|iso| iso['name'] == name}
-                                       .empty?
-                                 end
-                                   .keys
-
-      unless source_flavors.size <= 1
-         raise SIMPBuildException, "Multiple Source Flavors (#{source_flavors.size}) detected!" +
-                                   "\n\n" +
-                                   source_flavors.map{|x| "  - #{x}\n"}.join +
-                                   "\n\n" +
-                                   "were found when looking up name '#{name}'." +
-                                   "Check the release_mappings for bad data.\n"
-      end
-      source_flavors.join
+    # given a path string of files or directories, return a list of .iso files
+    #   - if all paths are bad, the result is an empty arrays
+    #   - directories are scanned for .iso files
+    def sanitize_iso_list( paths_string )
+      paths_string.split(':')
+        .map do |path|
+          if File.exists?( path )
+            if File.directory? path
+              Dir[File.join(path, '*.iso')]
+            elsif File.file? path
+              path
+            else
+              []
+            end
+          else
+            []
+          end
+        end
+        .flatten
+        .sort
+        .uniq
     end
 
-    def get_rel_flavor_for_iso_by_size( iso_path )
-      size = File.size iso_path
-      source_flavors = @target_data['flavors']
-                         .select do |flavor,flavor_data|
-                           !flavor_data['isos']
-                             .select{|iso| iso['size'] == size}
-                               .empty?
-                         end
-                           .keys
+    # Given a list of isos: see if any match the complete set of ISOs for one
+    # of the target_release's flavors.  the target release.   If it matches,
+    # return a Hash containing the flavor and the matched ISOs.  If they didn't
+    # match any known distros, return nil
+    #
+    # Some of the `isos` lists might be superfluous
+    def get_flavor( isos )
+      iso_sizes = Hash[isos.map{|iso| [iso,File.size(iso)]}.sort]
+      result = false
+      result_isos = []
+      @target_data['flavors'].each do |flavor,data|
+        sizes = data['isos'].map{|x| x['size']}.sort
+        next unless sizes.uniq == sizes & iso_sizes.values
+        matched_isos = iso_sizes.select{|k,v| sizes.include?(v) }.keys
+        result_isos  = matched_isos
 
-      if source_flavors.size > 1
-         name_flavors   = get_rel_flavor_for_iso_by_name(iso_path)
-         source_flavors = source_flavors & name_flavors
+        if @do_checksums || (sizes.uniq.size != sizes.size)
+          checksums = data['isos'].map{|x| x['checksum']}
+          iso_checksums = Hash[matched_isos.map do |iso|
+            puts "=== getting checksum of '#{iso}'" if @verbose
+            sum = `sha256sum "#{iso}"`.split(/ +/).first
+            [iso,sum]
+          end]
+
+          if checksums.map{|sum| iso_checksums.value? sum }
+                      .all?{|x| x.class == TrueClass }
+            result = flavor
+            result_isos = iso_checksums.keys.dup
+            break
+          end
+        end
+        result = flavor
+        break
       end
 
-      unless source_flavors.size <= 1
-         raise SIMPBuildException, "Multiple Source Flavors detected (#{source_flavors.size})!" +
-                                   "\n\n" +
-                                   source_flavors.map{|x| "  - #{x}\n"}.join +
-                                   "\n\n" +
-                                   "were found when looking up size '#{size}'." +
-                                   "Check the release_mappings for bad data.\n"
+      if result
+        {
+          'flavor' => result,
+          'isos'   => result_isos,
+        }
+      else
+        nil
       end
-      source_flavors.join
     end
 
-    # returns a list of all release flavors (e.g., 'CentOS', 'RedHat')
-    def get_rel_flavor_for_iso( iso_path )
-      name = File.basename iso_path
-      size = File.size iso_path
-      size_flavor = get_rel_flavor_for_iso_by_size( iso_path )
-    binding.pry
-      if !size_flavor.empty?
-        flavor_isos = @target_data['flavors'][size_flavor]['isos']
-        name_map = Hash[flavor_isos.map{|x| [x['name'],x['size']]}]
-        ##if name_map[name] != size
-        ##  warn
-    binding.pry
+    def autoscan_unpack_list( paths_string )
+      iso_paths    = sanitize_iso_list( paths_string )
+
+      if iso_paths.empty?
+         raise SIMPBuildException,
+           'ERROR: No suitable ISOs found for target release ' +
+           "'#{@target_release}' in '#{paths_string}'.\n\n" +
+
+           "## Recognized SIMP ISOs for '#{@target_release}:\n\n" +
+           @target_data.fetch('flavors')
+              .map{|flavor,data|
+                "  ### #{flavor}\n\n" +
+                data['isos'].map{|x| "    - #{x['name']}"}.join("\n") + "\n\n"
+              }.join + "\n\n"
       end
-      size_flavor
+
+      unpack_files = get_flavor( iso_paths )
+
+      if unpack_files.nil?
+         raise SIMPBuildException,
+           "ERROR: No flavors for target release '#{@target_release}' found in '#{paths_string}'.\n\n" +
+           "## Recognized SIMP ISOs for '#{@target_release}:\n\n" +
+           @target_data.fetch('flavors')
+              .map{|flavor,data|
+                "  ### #{flavor}\n\n" +
+                data['isos'].map{|x| "    - #{x['name']}"}.join("\n") + "\n\n"
+              }.join + "\n\n"
+
+      end
+
+      unpack_files
     end
   end
 end
