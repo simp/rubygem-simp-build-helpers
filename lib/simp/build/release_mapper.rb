@@ -74,6 +74,7 @@ module Simp::Build
         result_isos  = matched_isos
 
         if @do_checksums || (sizes.uniq.size != sizes.size)
+          result_isos  = []
           checksums = data['isos'].map{|x| x['checksum']}
           iso_checksums = Hash[matched_isos.map do |iso|
             puts "=== getting checksum of '#{iso}'" if @verbose
@@ -81,10 +82,12 @@ module Simp::Build
             [iso,sum]
           end]
 
-          if checksums.map{|sum| iso_checksums.value? sum }
-                      .all?{|x| x.class == TrueClass }
+          matched_isos = iso_checksums.select{|k,v| checksums.include?(v) }
+          if ( matched_isos.values.map{|sum|  checksums.include? sum }
+                           .all?{|x| x.class == TrueClass } ) &&
+             ( matched_isos.values.uniq.size == checksums.uniq.size )
             result = flavor
-            result_isos = iso_checksums.keys.dup
+            result_isos = matched_isos.keys.dup
             break
           end
         end
@@ -93,10 +96,9 @@ module Simp::Build
       end
 
       if result
-        {
-          'flavor' => result,
-          'isos'   => result_isos,
-        }
+        @target_data['flavors'][result]
+          .merge({'flavor' => result})
+          .merge({'isos' =>result_isos})
       else
         nil
       end
@@ -121,13 +123,17 @@ module Simp::Build
       unpack_files = get_flavor( iso_paths )
 
       if unpack_files.nil?
+         max_iso_name_size = [@target_data['flavors'].map{|k,v| v['isos']}].flatten.map{|x| x['name'].size}.max
          raise SIMPBuildException,
            "ERROR: No flavors for target release '#{@target_release}' found in '#{paths_string}'.\n\n" +
            "## Recognized SIMP ISOs for '#{@target_release}:\n\n" +
            @target_data.fetch('flavors')
               .map{|flavor,data|
                 "  ### #{flavor}\n\n" +
-                data['isos'].map{|x| "    - #{x['name']}"}.join("\n") + "\n\n"
+                data['isos'].map{|x|
+                  "    - #{x['name'].ljust(max_iso_name_size)}\n" +
+                  "       - size:     #{x['size']}\n" +
+                  "       - checksum: #{x['checksum']}"}.join("\n") + "\n\n"
               }.join + "\n\n"
 
       end

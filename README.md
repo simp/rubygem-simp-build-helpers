@@ -1,4 +1,4 @@
-[![Build Status](https://secure.travis-ci.org/simp/simp-build-helpers.svg?branch=master)](https://travis-ci.org/simp/simp-build-helpers)
+[![Build Status](https://secure.travis-ci.org/simp/rubygem-simp-build-helpers.svg?branch=master)](https://travis-ci.org/simp/rubygem-simp-build-helpers)
 [![License](http://img.shields.io/:license-apache-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0.html)
 # simp-build-helpers
 

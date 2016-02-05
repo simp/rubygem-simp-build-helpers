@@ -16,6 +16,7 @@ describe Simp::Build::ReleaseMapper do
       'c67-64-1' => File.join(pwd, 'CentOS-6.7-x86_64-bin-DVD1.iso'),
       'c67-64-2' => File.join(pwd, 'CentOS-6.7-x86_64-bin-DVD2.iso'),
       'bad'   => File.join(pwd, 'this', 'path', 'should', 'fail'),
+      'c67-false-positive' => File.join(pwd, 'CentOS-6.7-false-positive.iso'),
     }
   end
 
@@ -102,7 +103,7 @@ describe Simp::Build::ReleaseMapper do
 
     it 'detects CentOS flavor when checksums are enabled' do
       mapper = Simp::Build::ReleaseMapper.new( '4.2.X', @mappings_path, true )
-      list = [ iso_paths['c67-64-1'], iso_paths['c67-64-2'] ]
+      list = [ iso_paths['c67-64-1'], iso_paths['c67-64-2'], iso_paths['c67-false-positive'] ]
       expect( mapper.get_flavor(list)['flavor'] ).to eq('CentOS')
     end
   end
