@@ -1,6 +1,4 @@
 require 'yaml'
-require 'pry'
-
 
 module Simp::Build
   class SIMPBuildException < Exception; end

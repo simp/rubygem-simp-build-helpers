@@ -21,7 +21,7 @@ module Simp
   module Build
     module Helpers
       # simp-build-helpers version
-      VERSION = "0.1.0"
+      VERSION = "0.1.1"
     end
   end
 end
