@@ -38,7 +38,7 @@ module Simp::Build
     def sanitize_iso_list( paths_string )
       paths_string.split(':')
         .map do |path|
-          if File.exists?( path )
+          if File.exist?( path )
             if File.directory? path
               Dir[File.join(path, '*.iso')]
             elsif File.file? path

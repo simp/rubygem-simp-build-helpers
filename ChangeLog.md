@@ -1,3 +1,6 @@
+### 0.1.2 / 2023-10-19
+* Fix Ruby 3 compatibility and update gem dependencies
+
 ### 0.1.1 / 2016-09-28
 * Bug fix:
   * Removed extraneous `require 'pry'` from `release_mapper.rb`
