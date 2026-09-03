@@ -1,3 +1,8 @@
+### Unreleased
+* DEPRECATED: absorbed into `simp-rake-helpers` 6.1.0; this project is no
+  longer maintained separately. Note that 0.1.2 was never published to
+  RubyGems -- the last published release is 0.1.1.
+
 ### 0.1.2 / 2023-10-19
 * Fix Ruby 3 compatibility and update gem dependencies
 
